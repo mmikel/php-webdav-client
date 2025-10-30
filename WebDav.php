@@ -52,7 +52,7 @@ class WebDav {
 	 * List files in the remote folder
 	 */
 
-	public function list($folderPath = "/") {
+	public function list($folderPath = '') {
 		$itemCollection = [];
 		$remotePath = parse_url($this->_remoteUrl, PHP_URL_PATH);
 		$remotePath .= $folderPath;
@@ -130,6 +130,25 @@ class WebDav {
 		$this->sendHttpRequest('MKCOL', $httpRequestUrl);
 	}
 
+	/**
+	 * Get file properties on remote host
+	 */
+
+	public function prop($remoteFile) {
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFile;
+		$this->sendHttpRequest('PROPFIND', $httpRequestUrl);
+
+		$doc = new \DOMDocument;
+		@$doc->loadXML($this->_httpResponseText);
+
+		return [
+			'href' => $doc->getElementsByTagName('href')->item(0)->textContent,
+			'modified' => strtotime($doc->getElementsByTagName('getlastmodified')->item(0)->textContent),
+			'length' => $doc->getElementsByTagName('getcontentlength')->item(0)->textContent,
+			'type' => $doc->getElementsByTagName('getcontenttype')->item(0)->textContent,
+		];
+	}
+
 	protected function sendHttpRequest($pMethod, $pUrl, $pData = null, $pHeader = null, $pOption = null) {
 
 		$this->_httpResponseCode = null;
@@ -198,7 +217,7 @@ class WebDav {
 
 		if ($this->_httpResponseText === false) {
 			$error = error_get_last();
-			throw new \Exception($error["message"], $error["type"]);
+			throw new \Exception($error['message'], $error['type']);
 		}
 
 		// response header
