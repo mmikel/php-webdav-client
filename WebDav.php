@@ -33,31 +33,31 @@ class WebDav {
 	protected $_httpRequestCookie;
 	protected $_httpRequestAuthorization;
 
-	public function __construct() {
-		$this->_httpResponseHeader = array();
-	}
+	public function __construct($location, $username, $password) {
+		$this->_httpResponseHeader = [];
 
-	public function connect($location, $username, $password) {
-
-		$header = array();
-		$this->_httpRequestAuthorization = 'Basic '.base64_encode($username.':'.$password);
+		$header = [];
+		$this->_httpRequestAuthorization = 'Basic ' . base64_encode($username . ':' . $password);
 
 		$this->sendHttpRequest('HEAD', $location, null, $header);
 
 		if ($this->_httpResponseCode != 200 ) {
-			throw new \Exception('Unexpected response code. '.$this->_httpResponseCode);
+			throw new \Exception('Unexpected response code. ' . $this->_httpResponseCode);
 		}
 
 		$this->_remoteUrl = $location;
 	}
 
-	public function getFolderItemCollection($folderPath) {
+	/**
+	 * List files in the remote folder
+	 */
 
-		$itemCollection = array();
+	public function list($folderPath = "/") {
+		$itemCollection = [];
 		$remotePath = parse_url($this->_remoteUrl, PHP_URL_PATH);
 		$remotePath .= $folderPath;
 
-		$location = $this->_remoteUrl.$folderPath;
+		$location = $this->_remoteUrl . $folderPath;
 		$this->sendHttpRequest('PROPFIND', $location);
 
 		$doc = new \DOMDocument;
@@ -82,43 +82,71 @@ class WebDav {
 	 * Copy a local file to the remote host
 	 **/
 
-	public function uploadFile($localFile, $remoteFile) {
-
+	public function upload($localFile, $remoteFile) {
 		if (is_file($localFile) == false) {
 			throw new \Exception("File not found. '$localFile'");
 		}
 
 		$httpRequestText = file_get_contents($localFile);
-		$httpRequestUrl = $this->_remoteUrl.'/'.$remoteFile;
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFile;
 
 		$this->sendHttpRequest('PUT', $httpRequestUrl, $httpRequestText);
+	}
+
+	/**
+	 * Create file on the remote host
+	 **/
+
+	public function create($remoteFile, $content) {
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFile;
+		$this->sendHttpRequest('PUT', $httpRequestUrl, $content);
 	}
 
 	/**
 	 * Delete file on remote host
 	 **/
 
-	public function deleteFile($remoteFile) {
-		$httpRequestUrl = $this->_remoteUrl.'/'.$remoteFile;
+	public function delete($remoteFile) {
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFile;
 		$this->sendHttpRequest('DELETE', $httpRequestUrl);
 	}
 
-	protected function sendHttpRequest($pMethod, $pUrl, $pData=null, $pHeader=null, $pOption=null) {
+	/**
+	 * Get file from remote host
+	 **/
+
+	public function get($remoteFile) {
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFile;
+		$this->sendHttpRequest('GET', $httpRequestUrl);
+		return $this->_httpResponseText;
+	}
+
+	/**
+	 * Create folder on remote host
+	 */
+
+	public function mkdir($remoteFolder) {
+		$httpRequestUrl = $this->_remoteUrl . '/' . $remoteFolder;
+		$this->sendHttpRequest('MKCOL', $httpRequestUrl);
+	}
+
+	protected function sendHttpRequest($pMethod, $pUrl, $pData = null, $pHeader = null, $pOption = null) {
 
 		$this->_httpResponseCode = null;
-		$this->_httpResponseHeader = array();
+		$this->_httpResponseHeader = [];
 		$this->_httpResponseText = null;
 
-		$option = array(
-			'http' => array(
+		$option = [
+			'http' => [
 				'method' => $pMethod,
-			)
-		);
+			],
+		];
 
-		$header = array();
-		$header[] = array('Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
-		$header[] = array('Accept-Languange' => 'en-US,en;q=0.5');
-		$header[] = array('Authorization' => $this->_httpRequestAuthorization);
+		$header = [
+			[ 'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' ],
+			[ 'Accept-Languange' => 'en-US,en;q=0.5' ],
+			[ 'Authorization' => $this->_httpRequestAuthorization ],
+		];
 
 		// additional header
 
@@ -131,42 +159,47 @@ class WebDav {
 		// cookie
 
 		if (is_null($this->_httpRequestCookie) == false) {
-			$cookieItem = array();
+			$cookieItem = [];
 			foreach ($this->_httpRequestCookie as $cookieName => $cookieValue) {
-				$cookieItem[] = $cookieName.'='.$cookieValue;
+				$cookieItem[] = $cookieName . '=' . $cookieValue;
 			}
 			$headerCookieValue = implode('; ', $cookieItem);
-			$header[] = array('Cookie' => $headerCookieValue);
+			$header[] = [ 'Cookie' => $headerCookieValue ];
 		}
 
-		$header[] = array('Cache-Control' => 'no-cache');
-		$header[] = array('Upgrade-Insecure-Requests' => '1');
-		$header[] = array('Pragma' => 'no-cache');
+		$header[] = [ 'Cache-Control' => 'no-cache' ];
+		$header[] = [ 'Upgrade-Insecure-Requests' => '1' ];
+		$header[] = [ 'Pragma' => 'no-cache' ];
 
 		// post data
 
 		if (is_null($pData) == false) {
 			// assume binary data
-			$header[] = array('Content-Type' => 'application/octet-stream');
-			$header[] = array('Content-Length' => strlen($pData));
+			$header[] = [ 'Content-Type' => 'application/octet-stream' ];
+			$header[] = [ 'Content-Length' => strlen($pData) ];
 			$option['http']['content'] = $pData;
 		}
 
 		// http request header
 
-		$headerLine = array();
+		$headerLine = [];
 		foreach ($header as $headerItem) {
 			foreach ($headerItem as $headerName => $headerValue) {
-				$headerLine[] = $headerName.': '.$headerValue;
+				$headerLine[] = $headerName . ': ' . $headerValue;
 			}
 		}
-		$headerText = implode("\r\n", $headerLine)."\r\n";
+		$headerText = implode("\r\n", $headerLine) . "\r\n";
 
 		$option['http']['header'] = $headerText;
 
 		$context = stream_context_create($option);
-		$responseText = file_get_contents($pUrl, false, $context);
-		$this->_httpResponseText = $responseText;
+
+		$this->_httpResponseText = @file_get_contents($pUrl, false, $context);
+
+		if ($this->_httpResponseText === false) {
+			$error = error_get_last();
+			throw new \Exception($error["message"], $error["type"]);
+		}
 
 		// response header
 
@@ -185,7 +218,7 @@ class WebDav {
 			$headerName = $responseMatch[1];
 			$headerValue = $responseMatch[2];
 
-			$this->_httpResponseHeader[] = array($headerName => $headerValue);
+			$this->_httpResponseHeader[] = [ $headerName => $headerValue ];
 
 			// Handle cookie
 			if ($headerName == 'Set-Cookie') {
@@ -194,7 +227,5 @@ class WebDav {
 				}
 			}
 		}
-
-		return TRUE;
 	}
 }
